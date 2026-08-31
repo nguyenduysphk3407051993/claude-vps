@@ -2,7 +2,7 @@
 # =============================================================================
 #  setup.sh - Cai dat va trien khai stack Claude Code + code-server
 #
-#  YEU CAU: VPS da co san mot Traefik dang chay, so huu network "traefik-network",
+#  YEU CAU: VPS da co san mot Traefik dang chay, so huu network "traefik-net",
 #  entrypoint "websecure" va certresolver "letsencrypt". Stack nay KHONG tu dung
 #  Traefik rieng - no chi gan nhan (label) de Traefik san tao route.
 #

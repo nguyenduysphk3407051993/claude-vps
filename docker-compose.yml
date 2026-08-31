@@ -18,7 +18,7 @@ networks:
   web:
     # DUNG LAI network cua Traefik da chay san tren VPS (external: khong tu tao).
     # Neu doi ten network o day, phai doi ca label traefik.docker.network ben duoi.
-    name: traefik-network
+    name: traefik-net
     external: true
 
 # -----------------------------------------------------------------------------
@@ -39,7 +39,7 @@ services:
 
   # ===========================================================================
   #  KHONG co service traefik o day.
-  #  Stack nay dung Traefik DA CHAY SAN tren VPS (network: traefik-network).
+  #  Stack nay dung Traefik DA CHAY SAN tren VPS (network: traefik-net).
   #  Traefik do tu doc label ben duoi va tao route.
   #  Chung chi Let's Encrypt cung do stack Traefik do quan ly.
   # ===========================================================================
@@ -84,7 +84,7 @@ services:
     labels:
       - "traefik.enable=true"
       # Phai chi ro network vi container co the noi nhieu mang.
-      - "traefik.docker.network=traefik-network"
+      - "traefik.docker.network=traefik-net"
 
       # --- Router ---------------------------------------------------------
       - "traefik.http.routers.claude.rule=Host(`${DOMAIN}`)"

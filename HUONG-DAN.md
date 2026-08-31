@@ -49,7 +49,7 @@ Tài liệu này viết cho người **chưa từng dùng Docker hay Traefik**. 
               |   các container khác    |   exposedByDefault: false
               +-----------+-------------+
                           |
-                          | mạng Docker dùng chung "traefik-network"
+                          | mạng Docker dùng chung "traefik-net"
                           | HTTP :8080  (KHÔNG lộ ra Internet)
                           v
     ==========================================================
@@ -81,11 +81,11 @@ mạng chung và gắn nhãn — Traefik có sẵn sẽ tự phát hiện và t�
 
 | Hạng mục | Giá trị bắt buộc | Dùng ở đâu trong stack này |
 |---|---|---|
-| Docker network | `traefik-network` | `networks.web.name` + nhãn `traefik.docker.network` |
+| Docker network | `traefik-net` | `networks.web.name` + nhãn `traefik.docker.network` |
 | entryPoint HTTPS | `websecure` (:443) | nhãn `...routers.claude.entrypoints=websecure` |
 | entryPoint HTTP | `web` (:80, tự redirect sang `websecure`) | dùng cho HTTP-01 challenge của Let's Encrypt |
 | certificatesResolver | tên là `letsencrypt`, `httpChallenge` qua entrypoint `web` | nhãn `...routers.claude.tls.certresolver=letsencrypt` |
-| `providers.docker` | `exposedByDefault: false`, `network: traefik-network` | vì thế bắt buộc phải có nhãn `traefik.enable=true` |
+| `providers.docker` | `exposedByDefault: false`, `network: traefik-net` | vì thế bắt buộc phải có nhãn `traefik.enable=true` |
 | Kho chứng chỉ | `/letsencrypt/acme.json` — **thuộc stack Traefik** | stack này **không** đụng tới |
 | `providers.file` | `filename: /etc/traefik/config/dynamic.yml` | xem cảnh báo ngay dưới |
 
@@ -101,12 +101,12 @@ Kiểm tra nhanh trên VPS xem điều kiện tiên quyết đã đủ chưa:
 
 ```bash
 docker ps --filter name=traefik                  # container traefik có đang chạy không?
-docker network inspect traefik-network >/dev/null && echo "network OK"
+docker network inspect traefik-net >/dev/null && echo "network OK"
 docker logs --tail 30 traefik                    # log có sạch không?
 ```
 
-Nếu network `traefik-network` chưa tồn tại thì `docker compose up -d` của stack này sẽ báo
-lỗi ngay (`network traefik-network declared as external, but could not be found`) — đó là
+Nếu network `traefik-net` chưa tồn tại thì `docker compose up -d` của stack này sẽ báo
+lỗi ngay (`network traefik-net declared as external, but could not be found`) — đó là
 hành vi đúng, đừng tự tạo network rỗng bằng tay, hãy khởi động stack Traefik trước.
 
 > Traefik có sẵn **đã bật dashboard** tại `traefik.<tên-miền>` với BasicAuth riêng
@@ -507,13 +507,13 @@ File này khai báo **đúng một service** (`claude-code`). Không có service
 ```yaml
 networks:
   web:
-    name: traefik-network
+    name: traefik-net
     external: true
 ```
 
 | Khoá | Ý nghĩa |
 |---|---|
-| `name: traefik-network` | Tên network **thật** trên Docker — phải trùng đúng network mà Traefik có sẵn đang dùng (`providers.docker.network`). |
+| `name: traefik-net` | Tên network **thật** trên Docker — phải trùng đúng network mà Traefik có sẵn đang dùng (`providers.docker.network`). |
 | `external: true` | "Network này do người khác tạo, đừng tự tạo." Compose sẽ **không** tạo mới và **không** xoá khi `down`. Nếu network chưa tồn tại, `up` sẽ báo lỗi ngay thay vì âm thầm tạo một network rỗng không ai route tới. |
 
 > 🚨 Nếu đổi tên network ở đây thì **phải đổi luôn** nhãn `traefik.docker.network` bên dưới.
@@ -549,7 +549,7 @@ socket rồi tự sinh router/service/middleware — không cần sửa gì bên
 | Nhãn | Ý nghĩa | Phải khớp với gì bên Traefik |
 |---|---|---|
 | `traefik.enable=true` | Cho phép Traefik quản lý container này | Bắt buộc, vì Traefik đặt `exposedByDefault: false` |
-| `traefik.docker.network=traefik-network` | Chỉ rõ Traefik phải kết nối tới container qua network nào | `providers.docker.network` của Traefik |
+| `traefik.docker.network=traefik-net` | Chỉ rõ Traefik phải kết nối tới container qua network nào | `providers.docker.network` của Traefik |
 | `traefik.http.routers.claude.rule=Host(...)` | Chỉ nhận request có `Host` khớp `${DOMAIN}` | — |
 | `traefik.http.routers.claude.entrypoints=websecure` | Chỉ lắng nghe trên cổng 443 | tên entryPoint `websecure` |
 | `traefik.http.routers.claude.tls=true` | Bật TLS cho router | — |
@@ -663,7 +663,7 @@ cd /home/N8N/traefik-stack && docker compose logs -f
 ```
 
 > 🚨 `docker compose down` trong `~/claude-vps` **không** làm sập Traefik hay các site khác:
-> network `traefik-network` là `external` nên Compose không đụng tới. Ngược lại, restart
+> network `traefik-net` là `external` nên Compose không đụng tới. Ngược lại, restart
 > Traefik ở `/home/N8N/traefik-stack` sẽ làm gián đoạn **tất cả** site đi qua nó, kể cả cái này.
 
 ### 5.2. Cập nhật Claude Code
@@ -865,8 +865,8 @@ Nếu chứng chỉ chỉ đơn giản là chưa kịp cấp: chờ 30–90 giâ
 docker compose ps                          # claude-code có "healthy" không?
 docker compose logs --tail=80 claude-code
 
-# CẢ HAI container (traefik và claude-code) phải cùng nằm trong traefik-network
-docker network inspect traefik-network \
+# CẢ HAI container (traefik và claude-code) phải cùng nằm trong traefik-net
+docker network inspect traefik-net \
     --format '{{range .Containers}}{{.Name}} {{.IPv4Address}}{{"\n"}}{{end}}'
 
 docker compose exec claude-code curl -sI http://127.0.0.1:8080/healthz
@@ -878,8 +878,8 @@ docker compose exec claude-code curl -sI http://127.0.0.1:8080/healthz
 |---|---|
 | Container còn đang khởi động | Chờ 60 giây (`start_period` của healthcheck) |
 | Container bị crash | Đọc log, thường do hết RAM — xem mục 6.5 |
-| Sai nhãn `traefik.docker.network` | Phải bằng `traefik-network`, khớp `networks.web.name` trong compose **và** `providers.docker.network` của Traefik |
-| `traefik` không có trong `traefik-network` | Kiểm tra lại stack ở `/home/N8N/traefik-stack` |
+| Sai nhãn `traefik.docker.network` | Phải bằng `traefik-net`, khớp `networks.web.name` trong compose **và** `providers.docker.network` của Traefik |
+| `traefik` không có trong `traefik-net` | Kiểm tra lại stack ở `/home/N8N/traefik-stack` |
 | Sai `loadbalancer.server.port` | Phải là `8080` |
 | Sửa compose xong quên áp dụng | `docker compose up -d` |
 
@@ -1070,8 +1070,8 @@ docker compose config | grep -E 'traefik\.'
 # 2. Nhãn có thật sự nằm trên container đang chạy không?
 docker inspect claude-code --format '{{json .Config.Labels}}' | tr ',' '\n' | grep traefik
 
-# 3. Container có nằm trong traefik-network không? (phải liệt kê được cả 2 tên)
-docker network inspect traefik-network \
+# 3. Container có nằm trong traefik-net không? (phải liệt kê được cả 2 tên)
+docker network inspect traefik-net \
     --format '{{range .Containers}}{{.Name}}{{"\n"}}{{end}}'
 
 # 4. Traefik nói gì?
@@ -1081,12 +1081,12 @@ docker logs --tail 60 traefik
 | Dấu hiệu | Nguyên nhân | Cách sửa |
 |---|---|---|
 | Không có nhãn `traefik.enable=true` | Traefik đặt `exposedByDefault: false` nên bỏ qua container | Thêm lại nhãn, `docker compose up -d` |
-| `claude-code` không có trong `traefik-network` | Khối `networks` trong compose sai tên, hoặc quên `- web` ở service | Sửa `networks.web.name: traefik-network` + `external: true` |
+| `claude-code` không có trong `traefik-net` | Khối `networks` trong compose sai tên, hoặc quên `- web` ở service | Sửa `networks.web.name: traefik-net` + `external: true` |
 | Log: `middleware "secure-headers@file" does not exist` (hoặc tên middleware khác) | **Traefik v3 bỏ qua TOÀN BỘ router** khi middleware không tồn tại → 404 | Bỏ middleware đó khỏi nhãn, hoặc nạp nó theo [Phụ lục D](#phụ-lục-d--bật-thêm-middleware-bảo-mật-tuỳ-chọn) |
 | Log: `entryPoint "websecure" doesn't exist` | Tên entrypoint không khớp Traefik có sẵn | Đổi nhãn `entrypoints` cho khớp (mục 0.1) |
 | Log: `certificate resolver ... does not exist` | Tên certresolver sai (bản cũ dùng `le`) | Phải là `letsencrypt` |
-| Log: `Could not find network ...` / router trỏ IP lạ | Nhãn `traefik.docker.network` khác `traefik-network` | Sửa cho khớp |
-| `docker compose up -d` báo `network traefik-network declared as external, but could not be found` | Stack Traefik chưa chạy | `cd /home/N8N/traefik-stack && docker compose up -d` |
+| Log: `Could not find network ...` / router trỏ IP lạ | Nhãn `traefik.docker.network` khác `traefik-net` | Sửa cho khớp |
+| `docker compose up -d` báo `network traefik-net declared as external, but could not be found` | Stack Traefik chưa chạy | `cd /home/N8N/traefik-stack && docker compose up -d` |
 
 Không thấy gì bất thường? Mở **dashboard của Traefik** ở `https://traefik.example.com`
 (Traefik có sẵn đã bật sẵn, dùng BasicAuth riêng của nó) → tab **HTTP → Routers**, tìm router
