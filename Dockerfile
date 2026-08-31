@@ -109,10 +109,18 @@ ENV ENTRYPOINTD=/home/coder/entrypoint.d
 # neu goi cai dat hong, thay vi de nguoi dung phat hien luc runtime.
 # Luu y: KHONG dung --omit=optional, vi binary native duoc phat hanh qua
 # optionalDependencies + postinstall.
+# Phien ban Claude Code. Dat "latest" de lay ban moi nhat, hoac ghim mot so
+# cu the khi ban moi nhat bi loi (vi du 2.1.251 treo khi khoi tao tren Debian).
+ARG CLAUDE_CODE_VERSION=latest
+
+# "claude --help" (khong phai --version) duoc dung lam phep thu: --version tra ve
+# som truoc khi khoi tao, nen KHONG phat hien duoc loi treo luc khoi dong.
+# Dat timeout de build FAIL SOM thay vi treo vo han tren may build.
 RUN set -eux; \
-    npm install -g @anthropic-ai/claude-code; \
+    npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"; \
     npm cache clean --force; \
-    claude --version
+    claude --version; \
+    timeout 30 claude --help > /dev/null
 
 # Terminal cua code-server mo bash dang LOGIN SHELL => no nap /etc/profile,
 # ma file do GHI DE PATH bang gia tri mac dinh cua Debian, lam mat

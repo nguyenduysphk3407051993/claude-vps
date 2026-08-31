@@ -49,6 +49,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Ghim phien ban Claude Code khi ban "latest" bi loi. Sua trong .env.
+        CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-latest}
     image: claude-vps/code-server:latest
     container_name: claude-code
     restart: unless-stopped
