@@ -1,0 +1,20 @@
+# Ep LF cho moi file se chay tren Linux.
+# Soan tren Windows ma de CRLF -> container bao loi kieu:
+#   /usr/bin/env: 'bash\r': No such file or directory
+
+*               text=auto eol=lf
+*.sh            text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.template      text eol=lf
+Dockerfile      text eol=lf
+.env.example    text eol=lf
+.gitignore      text eol=lf
+*.md            text eol=lf
+
+# File nhi phan - khong dung cham
+*.png           binary
+*.jpg           binary
+*.gz            binary
+*.tar           binary
+*.xz            binary

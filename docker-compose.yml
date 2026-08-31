@@ -1,0 +1,123 @@
+# =============================================================================
+#  Stack: Traefik v3 (reverse proxy + HTTPS tu dong) + code-server chua Claude Code
+#
+#  Luong request:
+#     Internet --443--> traefik --(BasicAuth)--> claude-code:8080
+#
+#  Truoc khi chay:  bash scripts/setup.sh   (script se tao va kiem tra file .env)
+# =============================================================================
+
+# Dat ten project tuong minh => ten container / volume / network on dinh,
+# khong phu thuoc vao ten thu muc tren VPS.
+name: claude-vps
+
+# -----------------------------------------------------------------------------
+#  MANG
+# -----------------------------------------------------------------------------
+networks:
+  web:
+    # DUNG LAI network cua Traefik da chay san tren VPS (external: khong tu tao).
+    # Neu doi ten network o day, phai doi ca label traefik.docker.network ben duoi.
+    name: traefik-network
+    external: true
+
+# -----------------------------------------------------------------------------
+#  NAMED VOLUME
+#  - claude_config: chua /home/coder/.claude => TOKEN DANG NHAP CLAUDE nam o day.
+#  - code_config:   chua /home/coder/.config => cai dat + extension cua code-server.
+#  Dung named volume (khong bind ra host) de token khong nam tren filesystem host.
+#  CANH BAO: "docker compose down -v" SE XOA het 2 volume nay => mat dang nhap.
+#  Rieng ma nguon cua ban nam o bind mount ./workspace (xem service claude-code).
+# -----------------------------------------------------------------------------
+volumes:
+  claude_config:
+    name: claude_config
+  code_config:
+    name: code_config
+
+services:
+
+  # ===========================================================================
+  #  KHONG co service traefik o day.
+  #  Stack nay dung Traefik DA CHAY SAN tren VPS (network: traefik-network).
+  #  Traefik do tu doc label ben duoi va tao route.
+  #  Chung chi Let's Encrypt cung do stack Traefik do quan ly.
+  # ===========================================================================
+  #  CODE-SERVER + CLAUDE CODE
+  # ===========================================================================
+  claude-code:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: claude-vps/code-server:latest
+    container_name: claude-code
+    restart: unless-stopped
+    networks:
+      - web
+    # KHONG dung "ports": chi Traefik duoc phep tiep can container nay.
+    expose:
+      - "8080"
+    environment:
+      # Mat khau man hinh dang nhap cua chinh code-server (lop thu 2, sau BasicAuth).
+      - PASSWORD=${CODE_SERVER_PASSWORD}
+      - TZ=${TZ}
+      # Bao entrypoint cua base image chay code-server duoi user "coder".
+      - DOCKER_USER=coder
+      # --- TUY CHON (mac dinh TAT) ---------------------------------------
+      # Bo comment 2 dong duoi CHI KHI ban muon dung API key / token thay vi
+      # dang nhap OAuth bang tai khoan Pro/Max.
+      # LUU Y: ANTHROPIC_API_KEY co do uu tien CAO HON subscription => neu set,
+      # phi se tinh theo API chu khong dung goi thue bao.
+      # - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN}
+    volumes:
+      # Token dang nhap Claude Code (.credentials.json) - named volume.
+      - claude_config:/home/coder/.claude
+      # Cai dat + extension code-server - named volume.
+      - code_config:/home/coder/.config
+      # Ma nguon cua ban - BIND MOUNT ra host de de scp / git clone / backup.
+      # setup.sh da chown 1000:1000 cho thu muc nay (uid/gid cua user "coder").
+      - ./workspace:/home/coder/workspace
+    labels:
+      - "traefik.enable=true"
+      # Phai chi ro network vi container co the noi nhieu mang.
+      - "traefik.docker.network=traefik-network"
+
+      # --- Router ---------------------------------------------------------
+      - "traefik.http.routers.claude.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.claude.entrypoints=websecure"
+      - "traefik.http.routers.claude.tls=true"
+      # Ten resolver phai TRUNG voi khai bao trong traefik.yml cua Traefik san.
+      - "traefik.http.routers.claude.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.claude.service=claude"
+      # Chi dung middleware khai bang label. Muon them secure-headers@file va
+      # gzip@file thi phai noi chung vao dynamic.yml cua stack Traefik TRUOC
+      # (xem Phu luc D trong HUONG-DAN.md).
+      # Traefik v3: middleware khong ton tai => router bi bo qua hoan toan (404),
+      # chu khong phai chi mat header.
+      - "traefik.http.routers.claude.middlewares=claude-auth@docker"
+
+      # --- BasicAuth ------------------------------------------------------
+      # CANH BAO: moi ky tu "$" trong BASIC_AUTH_HASH phai duoc viet thanh "$$"
+      # NGAY TRONG FILE .env. scripts/setup.sh lam viec nay tu dong va tu kiem tra lai.
+      - "traefik.http.middlewares.claude-auth.basicauth.users=${BASIC_AUTH_USER}:${BASIC_AUTH_HASH}"
+      - "traefik.http.middlewares.claude-auth.basicauth.realm=Claude Code"
+
+      # --- Service --------------------------------------------------------
+      - "traefik.http.services.claude.loadbalancer.server.port=8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: ${CLAUDE_MEM_LIMIT}
+          cpus: "${CLAUDE_CPU_LIMIT}"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

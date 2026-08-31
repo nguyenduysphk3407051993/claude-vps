@@ -1,0 +1,18 @@
+# --- Bi mat: KHONG BAO GIO commit -------------------------------------------
+.env
+.env.*
+!.env.example
+
+# --- Thu muc lam viec: bind mount, la ma nguon rieng cua ban ------------------
+# Giu lai .gitkeep de thu muc van ton tai trong repo.
+workspace/*
+!workspace/.gitkeep
+
+# --- Ban sao luu ------------------------------------------------------------
+backups/
+
+# --- Rac he dieu hanh / editor ----------------------------------------------
+.DS_Store
+Thumbs.db
+*.swp
+*~
