@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+HD.txt
+
 
 # --- Thu muc lam viec: bind mount, la ma nguon rieng cua ban ------------------
 # Giu lai .gitkeep de thu muc van ton tai trong repo.

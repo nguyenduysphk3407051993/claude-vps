@@ -45,6 +45,165 @@ RUN set -eux; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*
 
+# -----------------------------------------------------------------------------
+#  TEXLIVE FULL  (~5.5 GB sau khi cai - day la layer NANG NHAT cua image)
+#
+#  De rieng mot layer: noi dung gan nhu khong bao gio doi, nen Docker cache lai
+#  va cac lan build sau khong phai tai lai. DUNG gop chung voi layer khac.
+#
+#  texlive-full da bao gom texlive-lang-other (ho tro tieng Viet) va toan bo
+#  package cua CTAN. Cac goi them vao duoi day KHONG nam trong texlive-full:
+#    - latexmk        : bien dich tu dong, tu chay lai du so lan
+#    - ghostscript    : nen PDF, chuyen doi PS/PDF
+#    - poppler-utils  : pdftoppm / pdftotext / pdfinfo (PDF -> anh, trich text)
+#    - fonts-liberation: font thay the Times/Arial/Courier dung metric
+# -----------------------------------------------------------------------------
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        texlive-full \
+        latexmk \
+        ghostscript \
+        poppler-utils \
+        fonts-liberation \
+        fonts-lmodern; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*; \
+    # Kiem tra ngay tai day de build FAIL SOM neu cai hong
+    xelatex --version | head -n 1; \
+    latexmk --version
+
+# -----------------------------------------------------------------------------
+#  CONG CU VIDEO / AM THANH
+#    - ffmpeg      : cat, ghep, chuyen ma, trich khung hinh, chen phu de
+#    - imagemagick : xu ly anh hang loat (convert / mogrify)
+#    - mkvtoolnix  : ghep-tach track trong file .mkv (mkvmerge)
+#    - atomicparsley: nhung thumbnail vao file mp4/m4a
+#    - yt-dlp      : tai video (cai o layer duoi, khong lay tu apt)
+# -----------------------------------------------------------------------------
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        ffmpeg \
+        imagemagick \
+        mkvtoolnix \
+        atomicparsley; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*; \
+    ffmpeg -version | head -n 1
+
+# --- yt-dlp ------------------------------------------------------------------
+# KHONG dung "apt install yt-dlp": ban trong kho Debian cu hang thang, ma YouTube
+# doi co che lien tuc => ban cu hong rat nhanh.
+# KHONG dung "pip install": Debian bookworm bat PEP 668 (externally-managed),
+# pip cai vao he thong se bi tu choi.
+# => Tai zipapp chinh chu. File nay chi can python3 (da co o layer tren) nen
+#    chay duoc tren ca amd64 lan arm64, khong phu thuoc kien truc.
+ARG YTDLP_VERSION=latest
+RUN set -eux; \
+    if [ "${YTDLP_VERSION}" = "latest" ]; then \
+        url="https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"; \
+    else \
+        url="https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/yt-dlp"; \
+    fi; \
+    curl -fsSL "$url" -o /usr/local/bin/yt-dlp; \
+    chmod 755 /usr/local/bin/yt-dlp; \
+    yt-dlp --version
+
+# -----------------------------------------------------------------------------
+#  CONG CU OFFICE - phan he thong (~1 GB)
+#    - pandoc      : chuyen doi Markdown <-> docx / pptx / pdf. Cong cu chinh
+#                    de bien noi dung soan bang Markdown thanh file Word.
+#    - libreoffice : chay headless de chuyen doi va sua file Office bang lenh
+#                    (docx -> pdf, xlsx -> csv, pptx -> pdf...). Chi cai 3 module
+#                    Writer / Calc / Impress, KHONG cai ban full (tiet kiem ~1 GB).
+#    - default-jre-headless: mot so tinh nang cua LibreOffice (macro, bo loc
+#                    nang cao) can Java. Thieu no thi convert co ban van chay
+#                    nhung se in canh bao va mot so dinh dang bi loi.
+#    - fonts-dejavu: phu day du tieng Viet, dung lam font du phong khi tai lieu
+#                    goi font khong co trong container.
+# -----------------------------------------------------------------------------
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        pandoc \
+        libreoffice-writer \
+        libreoffice-calc \
+        libreoffice-impress \
+        default-jre-headless \
+        fonts-dejavu; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*; \
+    pandoc --version | head -n 1; \
+    soffice --version
+
+# -----------------------------------------------------------------------------
+#  CONG CU OFFICE - phan thu vien Python (~300 MB)
+#
+#  Debian bookworm bat PEP 668 (externally-managed): "pip install" thang vao
+#  python he thong se bi TU CHOI. Cach xu ly o day la tao mot venv rieng va
+#  dat no LEN DAU PATH => lenh "python3" / "pip" mac dinh tro toi venv nay.
+#
+#  Dung co --system-site-packages de venv VAN NHIN THAY cac goi python3-* cai
+#  bang apt. Nho vay khong mat gi, chi them.
+# -----------------------------------------------------------------------------
+RUN set -eux; \
+    python3 -m venv --system-site-packages /opt/venv; \
+    /opt/venv/bin/pip install --no-cache-dir --upgrade pip; \
+    /opt/venv/bin/pip install --no-cache-dir \
+        python-docx \
+        python-pptx \
+        openpyxl \
+        XlsxWriter \
+        docxtpl \
+        odfpy \
+        Pillow \
+        lxml; \
+    chmod -R a+rX /opt/venv; \
+    /opt/venv/bin/python -c "import docx, pptx, openpyxl, xlsxwriter, docxtpl; print('office libs OK')"
+
+# -----------------------------------------------------------------------------
+#  PHAN TICH DU LIEU + DASHBOARD (~1.5 GB)
+#
+#  De rieng layer voi phan Office: nhom nay nang hon va thay doi thuong xuyen
+#  hon, tach ra thi sua ben nay khong phai cai lai ben kia.
+#
+#    pandas / numpy / scipy      : nen tang xu ly so lieu
+#    scikit-learn / statsmodels  : hoi quy, phan cum, kiem dinh thong ke
+#    matplotlib / seaborn        : bieu do tinh, xuat PNG de chen vao docx/PDF
+#    plotly                      : bieu do tuong tac (zoom, hover)
+#    kaleido                     : xuat bieu do plotly ra PNG/SVG/PDF - BAT BUOC
+#                                  neu muon nhung bieu do plotly vao file Word
+#    streamlit                   : dung dashboard bang Python thuan, khong can
+#                                  biet HTML/CSS/JS
+#    pyarrow                     : streamlit va pandas dung de doc/ghi nhanh
+#    tabulate                    : in bang dep ra terminal / Markdown
+#
+#  Font tieng Viet: matplotlib mac dinh dung DejaVu Sans - da cai o layer Office
+#  nen bieu do co dau tieng Viet hien dung, khong bi o vuong.
+# -----------------------------------------------------------------------------
+RUN set -eux; \
+    /opt/venv/bin/pip install --no-cache-dir \
+        pandas \
+        numpy \
+        scipy \
+        scikit-learn \
+        statsmodels \
+        matplotlib \
+        seaborn \
+        plotly \
+        kaleido \
+        streamlit \
+        pyarrow \
+        tabulate; \
+    chmod -R a+rX /opt/venv; \
+    MPLBACKEND=Agg /opt/venv/bin/python -c "\
+import pandas, numpy, scipy, sklearn, statsmodels, matplotlib, seaborn, plotly, streamlit; \
+print('data libs OK')"
+
+# Dat venv len dau PATH cho MOI user (ke ca root o cac layer sau).
+ENV PATH=/opt/venv/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
+
 # --- Node.js tu tarball chinh chu nodejs.org (KHONG dung NodeSource) ---------
 # Ly do: kho NodeSource "nodistro" moi ho tro toi Debian 12; base image code-server
 # dang dan chuyen sang Debian 13. Tarball chinh chu khong phu thuoc distro va
@@ -97,9 +256,12 @@ USER coder
 # NPM_CONFIG_PREFIX tro vao HOME => sau nay co the chay
 #   npm i -g @anthropic-ai/claude-code@latest   hoac   claude update
 # ngay trong container ma KHONG can sudo.
+# MPLBACKEND=Agg: container khong co man hinh, ep matplotlib ve backend khong
+# giao dien - neu khong, plt.show() se bao loi thieu display.
 ENV NPM_CONFIG_PREFIX=/home/coder/.npm-global \
-    PATH=/home/coder/.npm-global/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin \
-    CLAUDE_CONFIG_DIR=/home/coder/.claude
+    PATH=/home/coder/.npm-global/bin:/opt/venv/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin \
+    CLAUDE_CONFIG_DIR=/home/coder/.claude \
+    MPLBACKEND=Agg
 # BUG CUA BASE IMAGE: base khai bao ENV ENTRYPOINTD=${HOME}/entrypoint.d trong khi
 # HOME chua duoc set bang ENV => gia tri thuc te bi thanh "/entrypoint.d".
 # Phai set lai tuong minh, neu khong hook duoi day se khong bao gio chay.
@@ -125,7 +287,7 @@ RUN set -eux; \
 # chinh cua container, khong song sot qua /etc/profile).
 # => Ghi vao ca .bashrc (shell tuong tac) lan .profile (login shell).
 RUN set -eux; \
-    line='export PATH=/home/coder/.npm-global/bin:$PATH'; \
+    line='export PATH=/home/coder/.npm-global/bin:/opt/venv/bin:$PATH'; \
     printf '%s\n' "$line" >> /home/coder/.bashrc; \
     printf '%s\n' "$line" >> /home/coder/.profile
 

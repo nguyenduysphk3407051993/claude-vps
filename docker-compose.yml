@@ -52,6 +52,8 @@ services:
       args:
         # Ghim phien ban Claude Code khi ban "latest" bi loi. Sua trong .env.
         CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-latest}
+        # yt-dlp nen de "latest": ban cu hong nhanh khi YouTube doi co che.
+        YTDLP_VERSION: ${YTDLP_VERSION:-latest}
     image: claude-vps/code-server:latest
     container_name: claude-code
     restart: unless-stopped
