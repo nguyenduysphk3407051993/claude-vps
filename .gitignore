@@ -11,8 +11,10 @@ workspace/*
 # --- Ban sao luu ------------------------------------------------------------
 backups/
 
-# --- Rac he dieu hanh / editor ----------------------------------------------
+# --- Rac he dieu hanh / editor / local IDE ---------------------------------
 .DS_Store
 Thumbs.db
 *.swp
 *~
+.claude/
+
