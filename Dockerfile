@@ -114,6 +114,16 @@ RUN set -eux; \
     npm cache clean --force; \
     claude --version
 
+# Terminal cua code-server mo bash dang LOGIN SHELL => no nap /etc/profile,
+# ma file do GHI DE PATH bang gia tri mac dinh cua Debian, lam mat
+# /home/coder/.npm-global/bin (ENV PATH o tren chi co tac dung voi tien trinh
+# chinh cua container, khong song sot qua /etc/profile).
+# => Ghi vao ca .bashrc (shell tuong tac) lan .profile (login shell).
+RUN set -eux; \
+    line='export PATH=/home/coder/.npm-global/bin:$PATH'; \
+    printf '%s\n' "$line" >> /home/coder/.bashrc; \
+    printf '%s\n' "$line" >> /home/coder/.profile
+
 # Mo san thu muc lam viec (dau "." trong ENTRYPOINT cua base = WORKDIR nay)
 WORKDIR /home/coder/workspace
 
