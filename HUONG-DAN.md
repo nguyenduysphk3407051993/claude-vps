@@ -796,6 +796,80 @@ df -h                      # kiểm tra dung lượng còn lại
 ⚠️ **Đừng chạy `docker system prune --volumes`** — cờ `--volumes` sẽ xoá volume và bạn mất
 đăng nhập Claude.
 
+### 5.8. Chạy `claude` 24/7 (bền phiên) với tmux
+
+Đây là cách để phiên `claude` **không chết khi bạn đóng tab, mất mạng, hay khoá điện thoại**.
+Xem [mục 6.9-B](#69-terminal-trong-code-server-không-mở-được--hoặc-đóng-tab-là-mất-phiên-claude)
+để hiểu vì sao terminal thường lại không bền.
+
+**Cách dùng — chỉ một lệnh:**
+
+```bash
+cc
+```
+
+`cc` xử lý cả ba tình huống, bạn không cần nhớ đang ở tình huống nào:
+
+| Tình huống | `cc` làm gì |
+|---|---|
+| Chưa có phiên tmux nào | Tạo phiên tên `claude` và chạy `claude` bên trong |
+| Có phiên nhưng đang là **shell trống** (container vừa khởi động xong) | Chạy `claude` vào đó **một lần**, rồi gắn vào |
+| Có phiên và `claude` đang chạy dở | **Gắn thẳng vào**, không đụng gì cả |
+
+Nghĩa là những lần sau — mở lại tab, đổi máy, đổi điện thoại — cứ gõ `cc` là **về đúng phiên
+cũ**, thấy nguyên output đang chạy dở.
+
+> `cc` là script cài sẵn trong image (`/usr/local/bin/cc`). Container còn tự tạo sẵn một phiên
+> `claude` rỗng mỗi lần khởi động (hook `20-tmux-session.sh`), nên kể cả sau khi restart, gõ
+> `cc` là có ngay.
+
+**Vì sao phiên rỗng lại được tạo sẵn mà không chạy luôn `claude`?** Vì lần đầu container khởi
+động bạn chưa đăng nhập — nếu chạy ngay, màn hình đăng nhập sẽ hiện trong một phiên nền mà
+không ai nhìn thấy. Nên hook chỉ mở sẵn shell, còn `cc` mới là thứ khởi động `claude`.
+
+> **Lưu ý về việc tự khởi động:** `cc` chỉ tự gõ lệnh `claude` khi pane đang là shell trống,
+> và chỉ đúng **một lần** cho mỗi phiên. Nếu bạn đang mở `vim`, `htop`… hoặc đã chủ động thoát
+> `claude` để ngồi ở shell, `cc` sẽ **không** gõ chen vào. Muốn chạy lại thì tự gõ `claude`.
+
+**Các phím tắt tmux cần biết** (bấm `Ctrl+b` trước, thả ra, rồi bấm phím sau):
+
+| Thao tác | Phím |
+|---|---|
+| **Detach** — rời phiên nhưng để nó chạy tiếp | `Ctrl+b` rồi `d` |
+| Tách cửa sổ dọc / ngang | `Ctrl+b` rồi `%` / `"` |
+| Chuyển qua lại giữa các pane | `Ctrl+b` rồi phím mũi tên |
+| Cuộn xem lại output (chế độ copy) | `Ctrl+b` rồi `[`, thoát bằng `q` |
+| Tạo cửa sổ mới | `Ctrl+b` rồi `c` |
+
+**Lưu ý khi dùng trên điện thoại:** file cấu hình đã **bật mouse mode**, nên bạn **cuộn
+scrollback bằng cách vuốt ngón tay** ngay trên terminal (không cần phím PageUp — điện thoại
+không có). Chạm để chọn pane cũng được. Lịch sử cuộn giữ tới 50.000 dòng.
+
+**Thoát hẳn phiên:** trong `claude` gõ `/exit` (hoặc `exit` trong shell) để đóng phiên; lần
+sau `cc` sẽ tạo phiên mới.
+
+### 5.9. Chạy nền không cần ngồi canh (headless)
+
+Khi cần Claude làm một việc dài mà **không ai ngồi canh**, dùng chế độ *headless*
+(`claude -p "..."`): chạy một lượt rồi thoát, ghi log ra file. Repo có sẵn script minh hoạ:
+
+```bash
+# Trong terminal code-server (thư mục workspace):
+bash scripts/run-headless.sh "Tóm tắt các thay đổi trong repo và đề xuất bước tiếp theo"
+
+# Hoặc đọc prompt từ file:
+bash scripts/run-headless.sh --file prompts/task.txt
+```
+
+Log ghi vào `workspace/logs/claude-headless-<timestamp>.log` để xem lại sau.
+
+> 🚨 **Rủi ro về quyền tool.** Ở chế độ tương tác, Claude **hỏi** trước khi chạy lệnh shell.
+> Ở headless **không có ai để hỏi**. Script mặc định chỉ cấp trước vài tool đọc-only an toàn
+> (`Read`, `Grep`, `git log`...), nên việc nào cần tool ngoài danh sách sẽ **dừng lại** —
+> an toàn nhưng có thể "không làm được gì". Cờ `--dangerously-skip-permissions` cho phép Claude
+> chạy **bất kỳ lệnh nào không hỏi** (kể cả xoá file) — script **KHÔNG** bật mặc định; chỉ
+> bật khi bạn hiểu rõ rủi ro (đặt `DANGEROUS=1` khi gọi) và tin tưởng prompt.
+
 ---
 
 ## 6. Xử lý sự cố
@@ -1117,9 +1191,11 @@ docker compose restart claude-code
 
 Áp dụng cả sau khi bạn `git clone` hay `scp` bằng `sudo` vào thư mục đó.
 
-### 6.9. Terminal trong code-server không mở được
+### 6.9. Terminal trong code-server không mở được — hoặc "đóng tab là mất phiên `claude`"
 
-**Chẩn đoán:**
+**Hai triệu chứng khác nhau, đọc đúng phần của bạn:**
+
+#### A. Terminal không mở ra được
 
 ```bash
 docker compose exec claude-code bash        # từ VPS có vào được shell không?
@@ -1128,7 +1204,123 @@ docker compose logs claude-code | tail -50
 
 Thường do trình duyệt chặn WebSocket (extension chặn quảng cáo) hoặc reverse proxy khác
 chen giữa. Thử tab ẩn danh, tắt extension. Nếu bạn có proxy riêng (nginx/Cloudflare) đứng
-trước Traefik, phải bật chuyển tiếp WebSocket (`Upgrade` / `Connection` headers).
+trước Traefik, phải bật chuyển tiếp WebSocket (`Upgrade` / `Connection` headers) — xem
+thêm [mục 6.11](#611-cloudflare-proxy-đám-mây-cam-làm-rớt-phiên-và-hỏng-chứng-chỉ) về Cloudflare.
+
+#### B. Đóng tab / khoá điện thoại là phiên `claude` chết theo, mất việc đang chạy dở
+
+**Đây là hành vi BÌNH THƯỜNG của terminal code-server, không phải lỗi.** Hiểu tại sao:
+
+- Terminal tích hợp của code-server là một tiến trình shell **con của phiên WebSocket** giữa
+  trình duyệt và server. Khi bạn đóng tab, mất mạng, hoặc — đặc biệt trên **điện thoại** —
+  trình duyệt tự "ngủ đông" (kill) tab chạy nền để tiết kiệm pin, WebSocket đứt. code-server
+  coi như bạn đã rời đi và **gửi tín hiệu kết thúc cho shell đó** cùng mọi tiến trình con,
+  trong đó có `claude`. Kết quả: phiên đang chạy dở biến mất.
+- Bản thân code-server **không** giữ lại buffer terminal qua lần mất kết nối như vậy.
+
+**Cách giải quyết: chạy `claude` bên trong `tmux`.** `tmux` là một "terminal multiplexer" —
+nó tạo ra một phiên **sống độc lập với trình duyệt**, nằm hẳn bên trong container. Tab trình
+duyệt chỉ là một cửa sổ **nhìn vào** phiên tmux đó; đóng cửa sổ không giết phiên. Mở lại tab,
+gõ một lệnh để "gắn" (attach) lại, bạn thấy đúng phiên cũ với toàn bộ output còn nguyên.
+
+Image này **đã cài sẵn tmux** và tạo sẵn một phiên tên `claude` mỗi khi container khởi động.
+Bạn chỉ cần dùng lệnh tắt `cc` — xem [mục 5.8](#58-chạy-claude-247-bền-phiên-với-tmux).
+
+---
+
+### 6.10. Container bị OOM-kill / tự restart — mất sạch cả phiên tmux
+
+**Triệu chứng:** đang chạy ngon thì cả code-server lẫn phiên `claude` **biến mất cùng lúc**,
+container tự khởi động lại. Khác với "đóng tab mất phiên" ở mục 6.9: lần này **tmux cũng không
+cứu được**, vì khi kernel OOM-kill container thì chính tiến trình `tmux server` cũng chết theo.
+
+**Nguyên nhân thường gặp nhất:** container vượt `CLAUDE_MEM_LIMIT` (mặc định `3g`) và bị
+kernel giết vì hết RAM. Claude Code + build + test + LibreOffice/LaTeX ngốn RAM rất nhanh.
+
+**Chẩn đoán — chạy các lệnh này TRÊN VPS:**
+
+```bash
+# OOMKilled=true nghĩa là bị giết vì hết RAM. RestartCount cao = restart nhiều lần.
+docker inspect claude-code --format '{{.State.OOMKilled}} {{.RestartCount}} {{.State.StartedAt}}'
+
+# RAM đang dùng so với giới hạn (cột MEM USAGE / LIMIT và MEM %).
+docker stats --no-stream claude-code
+
+# Bằng chứng OOM ở tầng kernel (cần quyền root). Tìm dòng nhắc tên container/cgroup.
+sudo dmesg | grep -i -E 'oom|killed process' | tail -20
+```
+
+**Cách khắc phục:**
+
+- Tăng RAM cho container: sửa `CLAUDE_MEM_LIMIT` trong `.env` (VPS 4 GB để `3g`,
+  VPS 8 GB để `6g`), rồi `docker compose up -d` để áp dụng.
+- Nếu VPS chỉ 4 GB mà hay OOM: giảm tải song song (đừng chạy build nặng + LaTeX + Claude
+  cùng lúc), hoặc nâng cấp gói VPS.
+- Sau mỗi lần restart, phiên tmux được tạo lại **rỗng** (nhờ hook khởi động), nhưng công việc
+  đang dở thì đã mất — hãy chạy lại. Với việc dài không muốn mất, cân nhắc
+  [chế độ headless](#59-chạy-nền-không-cần-ngồi-canh-headless) ghi log ra file.
+
+> Đã đặt `stop_grace_period: 60s` trong `docker-compose.yml` để khi bạn **chủ động**
+> `restart`/`stop`, tiến trình trong tmux có 60 giây kết thúc gọn trước khi bị buộc dừng.
+> Lưu ý: điều này **không** áp dụng cho OOM-kill — OOM là kernel giết ngay lập tức, không có
+> ân hạn.
+
+### 6.11. Cloudflare proxy (đám mây cam) làm rớt phiên và hỏng chứng chỉ
+
+**Nếu bản ghi DNS của bạn đang bật proxy Cloudflare (đám mây MÀU CAM),** bạn đang đi ngược
+khuyến cáo ở [mục 1.2](#12-tên-miền-và-bản-ghi-dns) (yêu cầu để **DNS only / màu xám**).
+Việc này gây **hai** vấn đề, trong đó vấn đề thứ hai nguy hiểm hơn nhiều:
+
+**Vấn đề 1 — WebSocket chập chờn.** Proxy Cloudflare chen giữa trình duyệt và Traefik.
+code-server dựa **hoàn toàn vào WebSocket**; qua proxy CF, kết nối dễ bị **ngắt khi nhàn rỗi
+(idle)** hơn hẳn kết nối trực tiếp. Mỗi lần ngắt là một lần terminal code-server "rơi" — nếu
+bạn **không** dùng tmux thì mất phiên `claude`.
+
+**Vấn đề 2 — BOM HẸN GIỜ với chứng chỉ.** Proxy CF **chặn HTTP-01 challenge** của Let's
+Encrypt. Hôm nay site vẫn chạy bình thường vì chứng chỉ cũ còn hạn, nên rất dễ tưởng là không
+sao. Nhưng **đến kỳ gia hạn, Traefik sẽ xin chứng chỉ thất bại**, và khi chứng chỉ cũ hết hạn
+thì **site chết hẳn** với lỗi cảnh báo bảo mật trên trình duyệt. Lúc đó mới sửa thì đã mất
+dịch vụ. Đây là lý do đủ mạnh để xử lý ngay, độc lập với chuyện rớt phiên.
+
+#### Cách xử lý: tắt proxy, về DNS only
+
+1. Vào Cloudflare → **DNS** → bản ghi `A` của tên miền (ví dụ `code`) → bấm vào biểu tượng
+   đám mây cho nó chuyển sang **MÀU XÁM (DNS only)**.
+2. **Mở port 80** để HTTP-01 challenge đi tới được — thiếu bước này thì tắt proxy vẫn không
+   xin được chứng chỉ:
+
+   ```bash
+   sudo ufw allow 80/tcp
+   ```
+
+   Và mở cả port 80 ở **firewall của nhà cung cấp VPS** (bảng điều khiển trên web của họ) —
+   đây là chỗ hay bị bỏ sót, xem thêm
+   [mục 6.1](#61-trình-duyệt-báo-lỗi-chứng-chỉ--không-có-https).
+3. Chờ DNS lan truyền (5–30 phút) rồi kiểm chứng:
+
+   ```bash
+   # Phải ra IP THẬT của VPS, KHÔNG phải dải 104.x / 172.67.x của Cloudflare
+   dig +short code.example.com
+
+   # Phải thấy issuer là Let's Encrypt, KHÔNG phải "Cloudflare Inc ECC CA"
+   echo | openssl s_client -connect code.example.com:443 -servername code.example.com 2>/dev/null \
+     | openssl x509 -noout -issuer -dates
+   ```
+
+**Đánh đổi cần biết:** tắt proxy làm **lộ IP thật của VPS** và **mất lớp chắn DDoS** của
+Cloudflare. Bù lại, stack này vẫn còn hai lớp bảo vệ: BasicAuth ở Traefik và mật khẩu đăng
+nhập của chính code-server. Nếu lo ngại, hãy siết thêm firewall và cân nhắc fail2ban.
+
+> **Nếu bắt buộc phải giữ proxy cam** (ví dụ chính sách công ty): phải bật **WebSockets**
+> (Dashboard → **Network** → **WebSockets = On**), **và** chuyển Traefik sang **DNS-01
+> challenge** (cần API token Cloudflare) vì HTTP-01 sẽ không bao giờ chạy được qua proxy.
+> Lưu ý cấu hình challenge nằm trong `traefik.yml` của **stack Traefik ngoài repo này**
+> (`/home/N8N/traefik-stack`), không phải trong `docker-compose.yml` ở đây. Kết nối qua CF
+> vẫn có giới hạn thời gian nhàn rỗi — con số tuỳ gói dịch vụ và có thể thay đổi, tra tài
+> liệu Cloudflare hiện hành nếu cần số chính xác, đừng tin con số truyền miệng.
+
+> Dù chọn cách nào, **tmux là lớp phòng thủ nên có**. Nó không sửa được WebSocket chập chờn,
+> nhưng khiến việc WebSocket rớt **không còn đồng nghĩa với mất việc**.
 
 ---
 

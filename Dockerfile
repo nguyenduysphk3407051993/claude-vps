@@ -24,6 +24,9 @@ ENV TZ=Asia/Ho_Chi_Minh \
 
 # Cac goi bo sung. curl / git / wget / sudo / ca-certificates da co san trong base,
 # van liet ke ca-certificates de chac chan chung chi TLS moi nhat.
+# tmux: cho phien Claude Code SONG SOT khi dong tab trinh duyet / mat mang /
+#       khoa dien thoai. De chung o layer apt DAU TIEN nay de tan dung cache -
+#       KHONG dat sau layer texlive-full (~5.5GB) keo build lai layer nang.
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
@@ -38,7 +41,8 @@ RUN set -eux; \
         jq \
         less \
         gnupg \
-        xz-utils; \
+        xz-utils \
+        tmux; \
     ln -snf "/usr/share/zoneinfo/${TZ}" /etc/localtime; \
     echo "${TZ}" > /etc/timezone; \
     dpkg-reconfigure -f noninteractive tzdata; \
@@ -244,9 +248,19 @@ RUN set -eux; \
         /home/coder/entrypoint.d \
         /home/coder/.npm-global
 
-# Script hook chay moi lan container khoi dong (do entrypoint.sh cua base goi)
+# Script hook chay moi lan container khoi dong (do entrypoint.sh cua base goi).
+# Glob *.sh phia duoi phu ca file moi them (20-tmux-session.sh).
 COPY --chown=coder:coder docker/entrypoint.d/ /home/coder/entrypoint.d/
 RUN chmod +x /home/coder/entrypoint.d/*.sh
+
+# Cau hinh tmux cho user coder: mouse mode (dung tren dien thoai), scrollback
+# lon, status bar. Xem docker/tmux.conf.
+COPY --chown=coder:coder docker/tmux.conf /home/coder/.tmux.conf
+
+# Lenh tien loi `cc`: vao (hoac tao) phien tmux "claude" ben buong. Dat vao
+# /usr/local/bin (da nam trong PATH mac dinh cua moi shell).
+COPY docker/bin/cc /usr/local/bin/cc
+RUN chmod 755 /usr/local/bin/cc
 
 # -----------------------------------------------------------------------------
 #  GIAI DOAN 2 (coder): cai Claude Code vao npm prefix cua user

@@ -116,9 +116,20 @@ services:
       timeout: 5s
       retries: 3
       start_period: 60s
+    # Cho tien trinh trong tmux (claude, build, test...) them thoi gian ket thuc
+    # goi gang khi restart/stop truoc khi bi SIGKILL. Mac dinh cua Docker la 10s
+    # - qua ngan cho mot phien lam viec dang do. Dat 60s cho an toan.
+    stop_grace_period: 60s
     deploy:
       resources:
         limits:
+          # !!! CANH BAO OOM: neu container vuot nguong RAM nay, kernel se
+          # OOM-KILL toan bo container. Khi do MOI phien tmux (ke ca `claude`
+          # dang chay) deu CHET - tmux KHONG cuu duoc, vi ca tien trinh tmux
+          # server cung bi giet cung container. Restart xong phai go `cc` lai
+          # tu dau. Neu hay bi OOM: tang CLAUDE_MEM_LIMIT trong .env (VPS 4GB
+          # de 3g, VPS 8GB de 6g) hoac nang cap RAM VPS. Cach kiem tra OOM xem
+          # muc 6.10 trong HUONG-DAN.md.
           memory: ${CLAUDE_MEM_LIMIT}
           cpus: "${CLAUDE_CPU_LIMIT}"
     logging:

@@ -207,6 +207,9 @@ if grep -qU $'\r' "${ROOT_DIR}/docker/entrypoint.d/10-claude-config.sh" 2>/dev/n
     warn "Phat hien ky tu CRLF trong script - dang tu dong chuyen ve LF"
     find "${ROOT_DIR}" -type f \( -name '*.sh' -o -name 'Dockerfile' -o -name '*.yml' \
         -o -name '*.template' \) -exec sed -i 's/\r$//' {} +
+    # Script `cc` khong co duoi .sh nhung van la shell script - CRLF o shebang
+    # se lam no khong chay duoc. Xu ly rieng.
+    sed -i 's/\r$//' "${ROOT_DIR}/docker/bin/cc" 2>/dev/null || true
     ok "Da chuyen toan bo file ve dinh dang LF"
 fi
 

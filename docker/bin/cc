@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# =============================================================================
+#  cc - vao phien Claude Code BEN BUONG (persistent) qua tmux
+#
+#  Cach dung: chi go  cc  trong terminal cua code-server.
+#    - Chua co phien tmux ten "claude"  -> tao moi va chay `claude` ben trong.
+#    - Da co phien nhung dang la shell TRONG (do hook luc container khoi dong
+#      tao ra) -> chay `claude` vao do MOT LAN, roi attach.
+#    - Da co phien va dang chay dang do -> attach thang, khong dung gi ca.
+#
+#  Nho vay: dong tab trinh duyet / mat mang / khoa dien thoai deu KHONG giet
+#  phien claude. Lan sau mo lai terminal, chi can go `cc` la quay ve dung cho.
+#
+#  Detach (thoat ra ma van de phien chay tiep): bam  Ctrl+b  roi  d.
+# =============================================================================
+set -eu
+
+SESSION="claude"
+
+# Terminal code-server chay login shell nap /etc/profile => co the ghi de PATH,
+# lam mat /home/coder/.npm-global/bin (noi chua binary `claude`). Bao dam PATH
+# thay duoc ca claude lan venv, khong phu thuoc profile.
+export PATH="/home/coder/.npm-global/bin:/opt/venv/bin:${PATH}"
+
+# tmux phai co san (cai qua apt trong Dockerfile).
+if ! command -v tmux >/dev/null 2>&1; then
+    echo "cc: khong tim thay tmux. Kiem tra image da cai tmux chua." >&2
+    exit 1
+fi
+
+# Neu dang O TRONG mot tmux roi thi khong long tmux vao tmux - chi bao cach lam.
+if [ -n "${TMUX:-}" ]; then
+    echo "cc: ban dang o trong tmux roi. Dung 'tmux attach -t ${SESSION}' hoac"
+    echo "    chuyen cua so bang Ctrl+b s neu can." >&2
+    exit 1
+fi
+
+if ! tmux has-session -t "${SESSION}" 2>/dev/null; then
+    # Chua co phien nao -> tao moi va chay `claude` ngay ben trong, roi gan vao.
+    exec tmux new-session -s "${SESSION}" -c "${HOME}/workspace" claude
+fi
+
+# --- Den day: phien DA ton tai ------------------------------------------------
+# Thuong la phien RONG do hook 20-tmux-session.sh tao luc container khoi dong
+# (hook co y KHONG chay `claude` vi lan dau start nguoi dung chua dang nhap,
+#  man hinh dang nhap se hien trong phien nen ma khong ai thay).
+# => O day ta chay `claude` ho MOT LAN vao phien rong do, truoc khi attach.
+#
+# Viec nay dung `send-keys` - go phim ho nguoi dung - nen PHAI can than. Ba lop
+# chan duoi day bat buoc dung DU CA BA thi moi go:
+tmux_autostart_claude() {
+    # (1) Marker: chi tu chay dung MOT lan cho moi phien. Neu nguoi dung da
+    #     thoat claude va co y ngoi o shell thi lan sau `cc` khong ep quay lai.
+    [ "$(tmux show-option -t "${SESSION}" -qv @cc_autostart)" != "done" ] || return 0
+
+    # (2) Pane hien tai phai la SHELL TRONG. Neu nguoi dung dang mo vim/htop/...
+    #     ma van go thi chu "claude" se bi nhap thang vao chuong trinh do.
+    #     Day la lop chan quan trong nhat - dung bo.
+    case "$(tmux display-message -p -t "${SESSION}" '#{pane_current_command}')" in
+        bash|sh|zsh|dash) ;;
+        *) return 0 ;;
+    esac
+
+    # (3) Du dieu kien -> go lenh va danh dau da tu chay.
+    tmux send-keys -t "${SESSION}" 'claude' C-m
+    tmux set-option -t "${SESSION}" @cc_autostart done
+}
+
+tmux_autostart_claude || true
+
+# Gan vao phien. Moi lan mo tab moi deu quay ve dung cho cu, output con nguyen.
+exec tmux attach-session -t "${SESSION}"
